@@ -2,6 +2,8 @@
 
 
 https://t.me/PROJECT_RealHard
+
+
 Enable dynamic thermal control and slightly improve performance.
 
 
