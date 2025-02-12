@@ -1,14 +1,8 @@
 # VTEC_Dynamic
+
+
 https://t.me/PROJECT_RealHard
-VTEC_Dynamic Tweak Snapdragon 
-
-🔸Reduce the delay when opening the application.
-
-🔸Use anti-aliasing for textures, with multisampling for improved quality.
-
-🔸Use Optimized GPU processing mode to render performance graphics.
-
-🔸IMPROVE OVERALL PERFORMANCE
+Enable dynamic thermal control and slightly improve performance.
 
 
 
