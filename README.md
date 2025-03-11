@@ -24,6 +24,3 @@ Warning!! This module is high risk. You should research it carefully before usin
 
 RealHard project This is just a beginner's experiment. If there is any mistake, I apologize. I accept all advice. Thank you.
 
-Donate me coffee thank you.
-
-https://www.paypal.me/realhard3
