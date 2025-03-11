@@ -14,7 +14,7 @@ Flashing via Magisk
 
 Support xiaomi
 
-It improves smoothness and removes some constraints to some extent, but at the cost of increased power consumption and heat (it doesn't remove the thermal threshold, and when it reaches a certain point, the efficiency decreases accordingly).
+It improves smoothness and removes some constraints to some extent, but at the cost of increased power consumption and heat (this module does not remove the thermal threshold, and when it reaches a certain threshold, the efficiency will decrease accordingly).
 
 
 Tested on POCO F6 it works fine.  If it is another brand  You must experiment at your own risk.
