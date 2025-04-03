@@ -98,6 +98,9 @@ echo "150" > /proc/sys/vm/swappiness
 # Force GPU rendering in apps
 settings put global force_gpu_rendering 1
 
+# Increase RenderThread Priority
+renice -n -16 -p $(pidof RenderThread) 2>/dev/null
+
 # Script
 nohup sh $MODDIR/script/shellscript > /dev/null &
 
