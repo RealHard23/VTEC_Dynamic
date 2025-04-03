@@ -11,10 +11,9 @@ echo "$max" > /sys/devices/system/cpu/cpufreq/policy3/scaling_max_freq
 echo "$max" > /sys/devices/system/cpu/cpufreq/policy4/scaling_max_freq
 echo "$max" > /sys/devices/system/cpu/cpufreq/policy7/scaling_max_freq
 
-temperature="165000"
+temperature="150000"
     for zone in /sys/class/thermal/thermal_zone*; do
     if [ -f "$zone/trip_point_0_temp" ]; then
         echo "$temperature" > "$zone/trip_point_0_temp"
     fi
 done
-
