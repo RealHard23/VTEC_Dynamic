@@ -1,11 +1,9 @@
 id=Tweaks_Snapdragon
 name=VTEC_Dynamic
-version=v3.6
-versionCode=138
+version=v4.2.1
+versionCode=145
 author=REALHARD
-description=Improve overall performance.[Protect your system from bootloop].
-changeBoot=false
-needRamdisk=false
+description=🥳 Improve overall performance. Using dynamic thermal profiles.
 
 # CREDITS
 # @modulostk
