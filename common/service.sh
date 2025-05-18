@@ -55,10 +55,8 @@ if [ -e /sys/class/thermal/thermal_message/sconfig ]; then
 
 # Other commands or settings if required
 su -c settings put global touch_response_time 0
-su -c settings put global foreground_ram_priority high
 su -c cmd power set-fixed-performance-mode-enabled true
 su -c cmd thermalservice override-status 0
-su -c settings put system power_mode high
 su -c settings put system speed_mode 1
 su -c settings put secure speed_mode_enable 1
 su -c settings put system thermal_limit_refresh_rate 0
@@ -92,14 +90,10 @@ echo "0" > /sys/devices/system/cpu/cpu*/cpufreq/*/up_rate_limit_us
 
 # เพิ่ม GPU Priority และลด Latency
 echo "3" > /proc/sys/kernel/sched_child_runs_first
-echo "0" > /proc/sys/kernel/nmi_watchdog
-echo "150" > /proc/sys/vm/swappiness
-
-# Force GPU rendering in apps
-settings put global force_gpu_rendering 1
+echo "200" > /proc/sys/vm/swappiness
 
 # Increase RenderThread Priority
-renice -n -16 -p $(pidof RenderThread) 2>/dev/null
+#renice -n -5 -p $(pidof RenderThread) 2>/dev/null
 
 # Script
 nohup sh $MODDIR/script/shellscript > /dev/null &
