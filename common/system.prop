@@ -1,10 +1,14 @@
 # Set 3D and Rendering Optimization values
+debug.3d.gpu.rendering.enable=1
 persist.sys.composition.type=gpu
 debug.composition.type=gpu
 hw3d.force=1
 ro.gfx.angle.supported=true
 # persist.graphics.egl=angle
 # ro.zygote.disable_gl_preload=1
+debug.sf.hw=1
+debug.egl.hw=1
+persist.sys.ui.hw=1
 
 # Performance tweark
 video.accelerate.hw=1
@@ -12,11 +16,12 @@ debug.performance.tuning=1
 persist.sys.purgeable_assets=1
 persist.freecache.enable=true
 log.tag.TackManagerService=ERROR
+heat_suppression=0
+sys.thermal.level=0
 persist.sys.enable_templimit=false
+ro.thermctl.level=0
 ENFORCE_PROCESS_LIMIT=false
 persist.sys.spc.cpulimit.enabled=false
-persist.sys.trim_rendernode.enable=true
-ro.surface_flinger.use_color_management=true
 
 #Enable Quick Power-On Mode To Reduce Boot-Time 
 ro.config.hw_quickpoweron=true
@@ -65,11 +70,20 @@ ro.gps.aiding_data_extensions=1
 ro.gps.set_privacy_to=0
 ro.gps.use_gpsd=true
 
+# Dalvik/ART tuning
+dalvik.vm.usejit=true
+dalvik.vm.checkjni=false
+dalvik.vm.verify-bytecode=false
+dalvik.vm.dexopt-flags=m=y,v=n,o=v
+
+# Disable battery saver defaults
+power.saving.mode=0
+ro.config.hw_power_saving=false
+ro.config.power_save=false
+
 # Bypass LIAPP Credits@HUBERTHHUB
 persist.log.tag.LSPosed S
 persist.log.tag.LSPosed-Bridge S
-
-
 
 # Thank you
 #####
