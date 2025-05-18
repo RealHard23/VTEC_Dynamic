@@ -64,7 +64,7 @@ su -c settings put system link_turbo_option 1
 su -c settings put global block_untrusted_touches 0
 
 # Increase RenderThread Priority
-renice -n -16 -p $(pidof RenderThread) 2>/dev/null
+# renice -n -16 -p $(pidof RenderThread) 2>/dev/null
 
 # ข้อความ
 su -lp 2000 -c "cmd notification post -S bigtext -t '🔥TWEAK🔥' 'Tag' 'VTEC_Dynamic ⚡ปรับแต่ง⚡ Impover Overall Stability Successfull @RealHard️'"
