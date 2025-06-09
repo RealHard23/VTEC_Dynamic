@@ -20,7 +20,7 @@ jobs:
           # พยายามดึง tag ล่าสุด ถ้าไม่มี ให้ใช้ชื่อ branch เป็นค่าเริ่มต้น
           # นี่คือตัวอย่างที่สมมติว่าคุณใช้ Semantic Versioning (e.g., v1.0.0) เป็น tag
           # ถ้าคุณใช้ tag แบบอื่น อาจจะต้องปรับแต่งคำสั่งนี้
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0-dev") # ใช้ v0.0.0-dev ถ้าไม่มี tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v4.5") # ใช้ v0.0.0-dev ถ้าไม่มี tag
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
           
           # หากคุณต้องการ versionCode ที่เพิ่มขึ้นอัตโนมัติ
