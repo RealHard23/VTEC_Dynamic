@@ -1,6 +1,6 @@
 {
-            "version": "v4.5",
-            "versionCode": "149",
-            "zipUrl": "https://github.com/RealHard23/VTEC_Dynamic/releases/download/v4.5/VTEC_Dynamic_v4.5.zip",
-            "changelog": "https://raw.githubusercontent.com/RealHard23/VTEC_Dynamic/main/changelog.md"
+  "version": "v0.0.0-dev",
+  "versionCode": "149",
+  "zipUrl": "https://github.com/RealHard23/VTEC_Dynamic/releases/download/v0.0.0-dev/VTEC_Dynamic_v0.0.0-dev.zip",
+  "changelog": "https://raw.githubusercontent.com/RealHard23/VTEC_Dynamic/main/changelog.md"
 }
