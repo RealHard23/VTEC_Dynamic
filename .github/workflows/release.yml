@@ -1,36 +1,125 @@
-# This is a basic workflow to help you get started with Actions
+name: Build & Release Magisk Module
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches:
+      - main # หรือ master หากคุณใช้ branch หลักชื่อ master
+  workflow_dispatch: # อนุญาตให้รัน workflow นี้ได้ด้วยตนเองจากหน้า GitHub
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Get latest tag for versioning # เพิ่มขั้นตอนนี้เพื่อดึง tag ล่าสุดมาใช้เป็นเวอร์ชัน
+        id: get_version
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          # พยายามดึง tag ล่าสุด ถ้าไม่มี ให้ใช้ชื่อ branch เป็นค่าเริ่มต้น
+          # นี่คือตัวอย่างที่สมมติว่าคุณใช้ Semantic Versioning (e.g., v1.0.0) เป็น tag
+          # ถ้าคุณใช้ tag แบบอื่น อาจจะต้องปรับแต่งคำสั่งนี้
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0-dev") # ใช้ v0.0.0-dev ถ้าไม่มี tag
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+          
+          # หากคุณต้องการ versionCode ที่เพิ่มขึ้นอัตโนมัติ
+          # นี่คือตัวอย่างคร่าวๆ ซึ่งอาจต้องปรับตาม logic ของคุณ
+          # เช่น ดึงจากไฟล์ build.gradle หรือใช้เลข timestamp
+          # สำหรับตอนนี้ เราจะใช้ static value หรือ derive จาก tag
+          VERSION_CODE="149" # หรือคุณอาจจะ parse จาก LATEST_TAG
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+
+      - name: Zip Magisk module # บีบอัด Magisk module
+        run: |
+          echo "Zipping Magisk module..."
+          # *****************************************************************
+          # *** IMPORTANT: ปรับแก้บรรทัดด้านล่างนี้ให้ตรงกับโครงสร้าง ***
+          # *** ของโปรเจกต์ Magisk module ของคุณ           ***
+          # *****************************************************************
+          # ตัวอย่าง: สมมติว่าโครงสร้าง Magisk Module ของคุณอยู่ที่ root ของ repository
+          # และคุณต้องการ zip เฉพาะไฟล์และโฟลเดอร์ที่จำเป็นสำหรับโมดูลเท่านั้น
+          # ไฟล์และโฟลเดอร์ทั่วไปสำหรับ Magisk Module ได้แก่:
+          #   - module.prop
+          #   - customize.sh (ถ้ามี)
+          #   - post-fs-data.sh (ถ้ามี)
+          #   - service.sh (ถ้ามี)
+          #   - uninstall.sh (ถ้ามี)
+          #   - system/ (โฟลเดอร์)
+          #   - common/ (โฟลเดอร์)
+          #   - any other module-specific files/folders
+
+          # สร้างไฟล์ zip โดยไม่รวม .git และ .github และไฟล์ workflow
+          # ตรวจสอบชื่อไฟล์ ZIP ให้แน่ใจว่ามันสอดคล้องกับ update.json
+          # (ใน update.json ใช้ VTEC_Dynamic_vX.Y.zip ดังนั้นควรตั้งชื่อไฟล์ ZIP แบบเดียวกัน)
+          
+          ZIP_FILE_NAME="VTEC_Dynamic_${{ env.LATEST_TAG }}.zip"
+          
+          # ตัวอย่างการ zip ที่ครอบคลุม:
+          zip -r "$ZIP_FILE_NAME" . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "*.zip" \
+            -x "*.md" \
+            -x "LICENSE" \
+            -x ".gitignore" \
+            -x ".editorconfig" \
+            -x "update.json" \
+            -x "image.png" \
+            -x "your_workflow_file_name.yml" # ให้แน่ใจว่าไม่รวมไฟล์ workflow ตัวเอง
+
+          echo "Successfully zipped Magisk module to $ZIP_FILE_NAME."
+          echo "ZIP_FILE_NAME=$ZIP_FILE_NAME" >> $GITHUB_ENV # เก็บชื่อไฟล์ ZIP ไว้ใช้ใน step ถัดไป
+
+      - name: Update update.json # อัปเดตไฟล์ update.json
+        run: |
+          echo "Updating update.json..."
+          # ดึงชื่อ repository (RealHard23/VTEC_Dynamic)
+          REPO_NAME="${{ github.repository }}"
+          # ดึงเวอร์ชันและ versionCode จาก env
+          CURRENT_VERSION="${{ env.LATEST_TAG }}"
+          CURRENT_VERSION_CODE="${{ env.VERSION_CODE }}"
+          ZIP_URL="https://github.com/${REPO_NAME}/releases/download/${CURRENT_VERSION}/${{ env.ZIP_FILE_NAME }}"
+          CHANGELOG_URL="https://raw.githubusercontent.com/${REPO_NAME}/main/changelog.md"
+
+          cat << EOF > update.json
+          {
+            "version": "${CURRENT_VERSION}",
+            "versionCode": "${CURRENT_VERSION_CODE}",
+            "zipUrl": "${ZIP_URL}",
+            "changelog": "${CHANGELOG_URL}"
+          }
+          EOF
+          echo "Successfully updated update.json."
+
+      - name: Commit updated update.json # Commit การเปลี่ยนแปลงใน update.json และ push กลับไปที่ repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add update.json
+          
+          # ตรวจสอบว่ามีอะไรต้อง commit หรือไม่
+          git diff-index --quiet HEAD || (
+            git commit -m "Update update.json for new build [skip ci]"
+            git push
+          )
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release # สร้าง GitHub Release และอัปโหลดไฟล์ ZIP
+        id: create_release
+        uses: softprops/action-gh-release@v2 # Action สำหรับสร้าง Release
+        if: startsWith(github.ref, 'refs/tags/') # ทำงานเฉพาะเมื่อ push ด้วย tag
+        with:
+          files: ${{ env.ZIP_FILE_NAME }} # อัปโหลดไฟล์ ZIP ที่เราสร้าง
+          name: Release ${{ env.LATEST_TAG }}
+          tag_name: ${{ env.LATEST_TAG }}
+          body_path: changelog.md # สมมติว่ามี changelog.md อยู่ใน root directory ของคุณ
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Complete job
+        run: echo "Build and Release job completed successfully."
