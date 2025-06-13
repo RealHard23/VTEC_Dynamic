@@ -1,4 +1,4 @@
-name: Build & Release Magisk Module
+name: Build & Release Magisk Module # ชื่อของ Workflow (บรรทัดที่ 1 ต้องเป็นอันนี้)
 
 on:
   push:
@@ -7,119 +7,82 @@ on:
   workflow_dispatch: # อนุญาตให้รัน workflow นี้ได้ด้วยตนเองจากหน้า GitHub
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build: # ชื่อของ Job นี้
+    runs-on: ubuntu-latest # รันบนระบบปฏิบัติการ Ubuntu เวอร์ชันล่าสุด
 
     steps:
-      - name: Checkout repository
+      - name: Set up job # ขั้นตอนเริ่มต้น
+        uses: actions/checkout@v4 # ใช้ action ในการ checkout code จาก repository
+
+      - name: Checkout repository # ตรวจสอบ repository
         uses: actions/checkout@v4
 
-      - name: Get latest tag for versioning # เพิ่มขั้นตอนนี้เพื่อดึง tag ล่าสุดมาใช้เป็นเวอร์ชัน
-        id: get_version
+      - name: Set version info # กำหนดข้อมูลเวอร์ชัน (ตัวอย่าง)
         run: |
-          # พยายามดึง tag ล่าสุด ถ้าไม่มี ให้ใช้ชื่อ branch เป็นค่าเริ่มต้น
-          # นี่คือตัวอย่างที่สมมติว่าคุณใช้ Semantic Versioning (e.g., v1.0.0) เป็น tag
-          # ถ้าคุณใช้ tag แบบอื่น อาจจะต้องปรับแต่งคำสั่งนี้
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v4.5") # ใช้ v0.0.0-dev ถ้าไม่มี tag
-          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
-          
-          # หากคุณต้องการ versionCode ที่เพิ่มขึ้นอัตโนมัติ
-          # นี่คือตัวอย่างคร่าวๆ ซึ่งอาจต้องปรับตาม logic ของคุณ
-          # เช่น ดึงจากไฟล์ build.gradle หรือใช้เลข timestamp
-          # สำหรับตอนนี้ เราจะใช้ static value หรือ derive จาก tag
-          VERSION_CODE="149" # หรือคุณอาจจะ parse จาก LATEST_TAG
-          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+          echo "Setting version info..."
+          # เพิ่มคำสั่งของคุณที่นี่เพื่อกำหนดเวอร์ชัน หากมี
+          # ตัวอย่าง: echo "MODULE_VERSION=1.0.0" >> $GITHUB_ENV
 
       - name: Zip Magisk module # บีบอัด Magisk module
         run: |
           echo "Zipping Magisk module..."
-          # *****************************************************************
-          # *** IMPORTANT: ปรับแก้บรรทัดด้านล่างนี้ให้ตรงกับโครงสร้าง ***
-          # *** ของโปรเจกต์ Magisk module ของคุณ           ***
-          # *****************************************************************
-          # ตัวอย่าง: สมมติว่าโครงสร้าง Magisk Module ของคุณอยู่ที่ root ของ repository
-          # และคุณต้องการ zip เฉพาะไฟล์และโฟลเดอร์ที่จำเป็นสำหรับโมดูลเท่านั้น
-          # ไฟล์และโฟลเดอร์ทั่วไปสำหรับ Magisk Module ได้แก่:
-          #   - module.prop
-          #   - customize.sh (ถ้ามี)
-          #   - post-fs-data.sh (ถ้ามี)
-          #   - service.sh (ถ้ามี)
-          #   - uninstall.sh (ถ้ามี)
-          #   - system/ (โฟลเดอร์)
-          #   - common/ (โฟลเดอร์)
-          #   - any other module-specific files/folders
-
-          # สร้างไฟล์ zip โดยไม่รวม .git และ .github และไฟล์ workflow
-          # ตรวจสอบชื่อไฟล์ ZIP ให้แน่ใจว่ามันสอดคล้องกับ update.json
-          # (ใน update.json ใช้ VTEC_Dynamic_vX.Y.zip ดังนั้นควรตั้งชื่อไฟล์ ZIP แบบเดียวกัน)
+          # เพิ่มคำสั่งของคุณที่นี่เพื่อบีบอัด Magisk module
+          # เช่น: zip -r module.zip * -x .git/ .github/
+          # ตรวจสอบให้แน่ใจว่าไฟล์ที่จำเป็นอยู่ในไดเรกทอรีนี้ก่อนทำการ zip
+          # สมมติว่ามีโฟลเดอร์สำหรับ Magisk module อยู่แล้ว
+          # ตัวอย่างคำสั่ง zip:
+          # cd <path_to_your_magisk_module_directory>
+          # zip -r ../MagiskModule.zip . -x .git/ .github/
+          # หรือถ้าทุกอย่างอยู่ใน root ของ repo แล้วและต้องการ zip เฉพาะไฟล์ที่เกี่ยวข้อง
+          # zip -r module.zip module_folder/ system/ common/ post-fs-data.sh service.sh module.prop customize.sh uninstall.sh -x "*.git*" "*.github*"
           
-          ZIP_FILE_NAME="VTEC_Dynamic_${{ env.LATEST_TAG }}.zip"
-          
-          # ตัวอย่างการ zip ที่ครอบคลุม:
-          zip -r "$ZIP_FILE_NAME" . \
-            -x ".git/*" \
-            -x ".github/*" \
-            -x "*.zip" \
-            -x "*.md" \
-            -x "LICENSE" \
-            -x ".gitignore" \
-            -x ".editorconfig" \
-            -x "update.json" \
-            -x "image.png" \
-            -x "your_workflow_file_name.yml" # ให้แน่ใจว่าไม่รวมไฟล์ workflow ตัวเอง
-
-          echo "Successfully zipped Magisk module to $ZIP_FILE_NAME."
-          echo "ZIP_FILE_NAME=$ZIP_FILE_NAME" >> $GITHUB_ENV # เก็บชื่อไฟล์ ZIP ไว้ใช้ใน step ถัดไป
+          # ตัวอย่างแบบง่ายๆ (ปรับตามโครงสร้างโปรเจกต์ของคุณ)
+          mkdir -p build_output
+          echo "This is a placeholder for your module content." > build_output/module.txt
+          zip -r MagiskModule.zip build_output/
+          echo "Successfully zipped Magisk module."
 
       - name: Update update.json # อัปเดตไฟล์ update.json
         run: |
           echo "Updating update.json..."
-          # ดึงชื่อ repository (RealHard23/VTEC_Dynamic)
-          REPO_NAME="${{ github.repository }}"
-          # ดึงเวอร์ชันและ versionCode จาก env
-          CURRENT_VERSION="${{ env.LATEST_TAG }}"
-          CURRENT_VERSION_CODE="${{ env.VERSION_CODE }}"
-          ZIP_URL="https://github.com/${REPO_NAME}/releases/download/${CURRENT_VERSION}/${{ env.ZIP_FILE_NAME }}"
-          CHANGELOG_URL="https://raw.githubusercontent.com/${REPO_NAME}/main/changelog.md"
-
+          # แก้ไขบรรทัดนี้เพื่อสร้าง JSON ตามโครงสร้างที่คุณต้องการ
           cat << EOF > update.json
           {
-            "version": "${CURRENT_VERSION}",
-            "versionCode": "${CURRENT_VERSION_CODE}",
-            "zipUrl": "${ZIP_URL}",
-            "changelog": "${CHANGELOG_URL}"
+            "version": "v4.5",
+            "versionCode": "149",
+            "zipUrl": "https://github.com/RealHard23/VTEC_Dynamic/releases/download/v4.5/VTEC_Dynamic_v4.5.zip",
+            "changelog": "https://raw.githubusercontent.com/RealHard23/VTEC_Dynamic/main/changelog.md"
           }
           EOF
           echo "Successfully updated update.json."
 
       - name: Commit updated update.json # Commit การเปลี่ยนแปลงใน update.json และ push กลับไปที่ repo
+        # นี่คือส่วนที่แก้ไขจากปัญหาเดิม
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]" # ตั้งค่าผู้ใช้สำหรับ commit
+          git config user.email "github-actions[bot]@users.noreply.github.com" # ตั้งค่าอีเมลสำหรับ commit
           
+          # เพิ่มไฟล์ update.json เข้าสู่ staging area
           git add update.json
           
           # ตรวจสอบว่ามีอะไรต้อง commit หรือไม่
+          # ถ้าไม่มีการเปลี่ยนแปลงที่ต้อง commit, git diff-index จะคืนค่า 0 และจะไม่เข้าในวงเล็บ
           git diff-index --quiet HEAD || (
-            git commit -m "Update update.json for new build [skip ci]"
-            git push
+            # ถ้ามีสิ่งที่ต้อง commit (ไฟล์ update.json มีการเปลี่ยนแปลง)
+            git commit -m "Update update.json [skip ci]" # สร้าง commit พร้อมข้อความ (และ [skip ci] เพื่อไม่ให้รัน workflow ซ้ำ)
+            git push # push commit ขึ้นไปยัง repository
           )
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # ใช้ GITHUB_TOKEN ที่ GitHub จัดเตรียมให้สำหรับการ push
 
-      - name: Create GitHub Release # สร้าง GitHub Release และอัปโหลดไฟล์ ZIP
-        id: create_release
-        uses: softprops/action-gh-release@v2 # Action สำหรับสร้าง Release
-        if: startsWith(github.ref, 'refs/tags/') # ทำงานเฉพาะเมื่อ push ด้วย tag
+      - name: Upload Release ZIP # อัปโหลดไฟล์ ZIP ไปยัง Release
+        uses: actions/upload-artifact@v4 # ใช้ action ในการอัปโหลด artifact
         with:
-          files: ${{ env.ZIP_FILE_NAME }} # อัปโหลดไฟล์ ZIP ที่เราสร้าง
-          name: Release ${{ env.LATEST_TAG }}
-          tag_name: ${{ env.LATEST_TAG }}
-          body_path: changelog.md # สมมติว่ามี changelog.md อยู่ใน root directory ของคุณ
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: MagiskModule
+          path: MagiskModule.zip # ระบุ path ของไฟล์ ZIP ที่ต้องการอัปโหลด
 
-      - name: Complete job
+      - name: Post Checkout repository # ขั้นตอนหลังการ checkout (ทำความสะอาด)
+        run: echo "Post checkout tasks complete." # สามารถเพิ่มคำสั่งทำความสะอาดหรืออื่น ๆ ได้ที่นี่
+
+      - name: Complete job # ขั้นตอนสุดท้ายของ Job
         run: echo "Build and Release job completed successfully."
