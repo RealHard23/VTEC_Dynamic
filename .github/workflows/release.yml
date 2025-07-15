@@ -1,4 +1,4 @@
-Name: Build & Release Magisk Module
+name: Build & Release Magisk Module
 
 on:
   push:
