@@ -18,15 +18,13 @@ jobs:
       - name: Get Release Info
         id: get_release # Assign an ID to this step to access its outputs
         run: |
-          # The GitHub event payload contains release information
-          # We need to parse it to get the version and asset URL
           RELEASE_TAG="${{ github.event.release.tag_name }}"
           RELEASE_ZIP_URL=""
           
           # Find the .zip asset in the release assets
-          # Assuming the module zip file contains "VTEC_Unlimit" in its name
+          # UPDATED: Looking for "VTEC_Dynamic_" in the zip name
           for asset in $(echo "${{ github.event.release.assets | toJSON }}" | jq -r '.[].browser_download_url'); do
-            if [[ "$asset" == *"/VTEC_Unlimit_"*".zip" ]]; then
+            if [[ "$asset" == *"/VTEC_Dynamic_"*".zip" ]]; then # Changed from VTEC_Unlimit_
               RELEASE_ZIP_URL="$asset"
               break
             fi
@@ -38,24 +36,17 @@ jobs:
           fi
 
           if [ -z "$RELEASE_ZIP_URL" ]; then
-            echo "Error: Magisk module .zip asset (containing 'VTEC_Unlimit_') not found in the release assets!"
+            echo "Error: Magisk module .zip asset (containing 'VTEC_Dynamic_') not found in the release assets!" # Changed message
             exit 1
           fi
 
-          # Extract version and versionCode from the tag name
-          # Assuming tag_name is like v4.3 or 4.3 or V4.3
-          MODULE_VERSION=$(echo "$RELEASE_TAG" | sed 's/^v//I') # Remove 'v' prefix if exists, case-insensitive
-          
-          # Try to get versionCode. This is a bit tricky if not in tag.
-          # For simplicity, let's assume versionCode is part of the tag or hardcode.
-          # A better way might be to add it to release body or always use the old one from module.prop
-          # For now, let's try to get a numeric part from the end of the tag if possible, or use a placeholder.
-          MODULE_VERSION_CODE=$(echo "$RELEASE_VERSION" | sed 's/[^0-9]//g') # Extract only numbers
-          if [ -z "$MODULE_VERSION_CODE" ]; then
-            MODULE_VERSION_CODE="0" # Fallback if no numbers found
-          fi
+          # Extract module version from the tag name (e.g., v4.7 -> 4.7)
+          MODULE_VERSION=$(echo "$RELEASE_TAG" | sed 's/^v//I')
 
-          # Output to be used by subsequent steps
+          # UPDATED: Hardcode versionCode for simplicity as per your request
+          # If you want it to be dynamic, you'll need a different extraction method
+          MODULE_VERSION_CODE="151" # Set to your desired versionCode
+
           echo "Detected Module Version: $MODULE_VERSION"
           echo "Detected Module Version Code: $MODULE_VERSION_CODE"
           echo "Detected Zip URL: $RELEASE_ZIP_URL"
@@ -67,10 +58,8 @@ jobs:
       - name: Update module.prop
         run: |
           echo "=== Updating module.prop ==="
-          # Backup original module.prop
           cp module.prop module.prop.bak
           
-          # Update version in module.prop
           if grep -q "^version=" module.prop; then
             sed -i "s|^version=.*|version=${{ env.MODULE_VERSION }}|" module.prop
           else
@@ -116,7 +105,7 @@ jobs:
             echo "Committed module.prop and update.json changes."
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Required for pushing changes
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Complete job
         run: |
@@ -125,4 +114,3 @@ jobs:
           echo "Version: ${{ env.MODULE_VERSION }}"
           echo "Version Code: ${{ env.MODULE_VERSION_CODE }}"
           echo "Zip URL: ${{ env.MODULE_ZIP_URL }}"
-
