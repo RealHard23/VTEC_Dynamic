@@ -4,161 +4,96 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # อนุญาตให้รัน workflow ด้วยตัวเอง
+  workflow_dispatch:
 
 permissions:
-  contents: write # ต้องการสิทธิ์ในการเขียนไฟล์ใน repository
+  contents: write
 
 jobs:
   build:
-    runs-on: ubuntu-latest # รันบนระบบปฏิบัติการ Ubuntu ล่าสุด
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository # ดึงโค้ดจาก repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install jq # ติดตั้ง jq สำหรับประมวลผล JSON
+      - name: Get latest release info
+        id: get_release
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-
-      - name: Get version from latest release # ดึงเวอร์ชันจาก release ล่าสุด
-        id: get_version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Fetching latest release information..."
+          # Get latest release from GitHub API
+          LATEST_RELEASE=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest")
           
-          # ดึงข้อมูล Release ล่าสุด
-          RELEASE_INFO=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/latest")
-          
-          # ตรวจสอบว่ามี release หรือไม่
-          if echo "$RELEASE_INFO" | grep -q '"message": "Not Found"'; then
-            echo "No previous releases found. Using default version."
-            VERSION="v1.0"
-            VERSION_CODE="100"
+          if [ "$LATEST_RELEASE" != "null" ] && [ "$(echo $LATEST_RELEASE | jq -r '.tag_name')" != "null" ]; then
+            VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
+            DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[0].browser_download_url')
+            
+            echo "Found latest release: $VERSION"
+            echo "Download URL: $DOWNLOAD_URL"
+            
+            echo "MODULE_VERSION=$VERSION" >> $GITHUB_ENV
+            echo "DOWNLOAD_URL=$DOWNLOAD_URL" >> $GITHUB_ENV
+            echo "HAS_RELEASE=true" >> $GITHUB_ENV
           else
-            echo "Latest release found. Extracting version information..."
-            
-            # ดึงเวอร์ชันปัจจุบัน
-            CURRENT_TAG=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
-            echo "Current tag: $CURRENT_TAG"
-            
-            # ดึงไฟล์ update.json จาก release ล่าสุด (ถ้ามี)
-            UPDATE_JSON_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name == "update.json") | .browser_download_url')
-            
-            if [ -n "$UPDATE_JSON_URL" ] && [ "$UPDATE_JSON_URL" != "null" ]; then
-              echo "Downloading update.json from latest release..."
-              curl -L -o current_update.json "$UPDATE_JSON_URL"
-              
-              # ดึงเวอร์ชันและ versionCode จาก update.json
-              CURRENT_VERSION=$(jq -r '.version' current_update.json)
-              CURRENT_VERSION_CODE=$(jq -r '.versionCode' current_update.json)
-              
-              echo "Current version from update.json: $CURRENT_VERSION"
-              echo "Current version code from update.json: $CURRENT_VERSION_CODE"
-              
-              # เพิ่ม version code
-              NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
-              
-              # เพิ่ม minor version (เช่น v4.7 -> v4.8)
-              if [[ $CURRENT_VERSION =~ ^v([0-9]+)\.([0-9]+)$ ]]; then
-                MAJOR=${BASH_REMATCH[1]}
-                MINOR=${BASH_REMATCH[2]}
-                NEW_MINOR=$((MINOR + 1))
-                NEW_VERSION="v${MAJOR}.${NEW_MINOR}"
-              else
-                # ถ้าไม่ตรงกับรูปแบบ ให้ใช้ tag name + 1
-                if [[ $CURRENT_TAG =~ ^v([0-9]+)\.([0-9]+)$ ]]; then
-                  MAJOR=${BASH_REMATCH[1]}
-                  MINOR=${BASH_REMATCH[2]}
-                  NEW_MINOR=$((MINOR + 1))
-                  NEW_VERSION="v${MAJOR}.${NEW_MINOR}"
-                else
-                  NEW_VERSION="v1.0"
-                fi
-              fi
-              
-              VERSION=$NEW_VERSION
-              VERSION_CODE=$NEW_VERSION_CODE
-              
-            else
-              echo "update.json not found in latest release. Using tag name to increment version."
-              
-              # ถ้าไม่มี update.json ให้ใช้ tag name
-              if [[ $CURRENT_TAG =~ ^v([0-9]+)\.([0-9]+)$ ]]; then
-                MAJOR=${BASH_REMATCH[1]}
-                MINOR=${BASH_REMATCH[2]}
-                NEW_MINOR=$((MINOR + 1))
-                VERSION="v${MAJOR}.${NEW_MINOR}"
-                VERSION_CODE=$((MINOR * 10 + 100)) # สร้าง version code จาก minor version
-              else
-                VERSION="v1.0"
-                VERSION_CODE="100"
-              fi
-            fi
+            echo "No release found, using default version"
+            VERSION="v4.7"
+            VERSION_CODE="151"
+            echo "MODULE_VERSION=$VERSION" >> $GITHUB_ENV
+            echo "MODULE_VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+            echo "HAS_RELEASE=false" >> $GITHUB_ENV
           fi
+
+      - name: Download and extract release files
+        if: env.HAS_RELEASE == 'true'
+        run: |
+          echo "=== Downloading release files ==="
           
-          echo "New version: $VERSION"
-          echo "New version code: $VERSION_CODE"
+          # Download the release zip
+          curl -L -o release.zip "${{ env.DOWNLOAD_URL }}"
           
-          # Create version without 'v' prefix for filename
-          VERSION_NUMBER=$(echo "$VERSION" | sed 's/^v//')
+          # Extract and replace repository files
+          echo "=== Extracting release files ==="
+          unzip -o release.zip
           
-          # Set environment variables
+          # List extracted files
+          echo "=== Extracted files ==="
+          ls -la
+          
+          # Extract version code from module.prop if it exists
+          if [ -f "module.prop" ]; then
+            VERSION_CODE=$(grep "^versionCode=" module.prop | cut -d'=' -f2 || echo "151")
+            echo "MODULE_VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+            echo "Found version code: $VERSION_CODE"
+          else
+            echo "MODULE_VERSION_CODE=151" >> $GITHUB_ENV
+          fi
+
+      - name: Set version info (fallback)
+        if: env.HAS_RELEASE == 'false'
+        run: |
+          VERSION="v4.7"
+          VERSION_CODE="151"
           echo "MODULE_VERSION=$VERSION" >> $GITHUB_ENV
           echo "MODULE_VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
-          echo "MODULE_VERSION_NUMBER=$VERSION_NUMBER" >> $GITHUB_ENV
 
-      - name: Download additional assets from latest release # ดาวน์โหลดไฟล์เพิ่มเติมจาก release ล่าสุด
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Downloading additional assets from latest release..."
-          
-          # ดึงข้อมูล Release ล่าสุดอีกครั้ง
-          RELEASE_INFO=$(curl -s -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/latest")
-          
-          if ! echo "$RELEASE_INFO" | grep -q '"message": "Not Found"'; then
-            # ดาวน์โหลดไฟล์ changelog.md (ถ้ามี)
-            CHANGELOG_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name == "changelog.md") | .browser_download_url')
-            
-            if [ -n "$CHANGELOG_URL" ] && [ "$CHANGELOG_URL" != "null" ]; then
-              echo "Downloading changelog.md from latest release..."
-              curl -L -o downloaded_changelog.md "$CHANGELOG_URL"
-              echo "changelog.md downloaded successfully"
-            else
-              echo "changelog.md not found in latest release assets."
-            fi
-          fi
-
-      - name: Check and list files # ตรวจสอบโครงสร้างไฟล์
+      - name: Check and list files
         run: |
           echo "=== Repository structure ==="
           ls -la
-          echo "=== Current version info ==="
-          echo "Version: ${{ env.MODULE_VERSION }}"
-          echo "Version Code: ${{ env.MODULE_VERSION_CODE }}"
-          echo "Version Number: ${{ env.MODULE_VERSION_NUMBER }}"
           echo "=== Checking module.prop ==="
           if [ -f "module.prop" ]; then
             echo "module.prop exists"
             cat module.prop
           else
-            echo "module.prop not found! This module might not be valid without it."
+            echo "module.prop not found!"
             exit 1
           fi
 
-      - name: Update module.prop version # อัปเดตเวอร์ชันใน module.prop
+      - name: Update module.prop version
         run: |
           # Backup original module.prop
           cp module.prop module.prop.bak
           
-          # Update version in module.prop
+          # Update version in module.prop - handle different formats
           if grep -q "^version=" module.prop; then
             sed -i 's/^version=.*/version=${{ env.MODULE_VERSION }}/' module.prop
           else
@@ -174,7 +109,7 @@ jobs:
           echo "=== Updated module.prop ==="
           cat module.prop
 
-      - name: Set executable permissions # กำหนดสิทธิ์ในการเรียกใช้งานไฟล์สคริปต์
+      - name: Set executable permissions
         run: |
           # Set permissions only if files exist
           [ -f "install.sh" ] && chmod +x install.sh || echo "install.sh not found"
@@ -199,43 +134,42 @@ jobs:
           # Set permissions for system directory
           if [ -d "system" ]; then
             find system -type f -exec chmod 644 {} \;
-            find system -type d -exec chmod 755 {} \;
           fi
 
-      - name: Create Magisk module zip # สร้างไฟล์ Magisk module zip
+      - name: Create Magisk module zip
         run: |
           echo "=== Creating zip file ==="
           
-          # Create zip with only existing files
-          ZIP_FILES=""
+          # Create zip with all repository files except .git and workflow files
+          zip -r "VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip" . \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "*.bak" \
+            -x "*.md" \
+            -x "*.txt" \
+            -x "*.log" \
+            -x ".gitignore" \
+            -x "README*" \
+            -x "readme*" \
+            -x "LICENSE*" \
+            -x "license*" \
+            -x "*.zip" \
+            -x "release.zip"
           
-          [ -f "module.prop" ] && ZIP_FILES="$ZIP_FILES module.prop"
-          [ -f "install.sh" ] && ZIP_FILES="$ZIP_FILES install.sh"
-          [ -f "uninstall.sh" ] && ZIP_FILES="$ZIP_FILES uninstall.sh"
-          [ -d "META-INF" ] && ZIP_FILES="$ZIP_FILES META-INF"
-          [ -d "system" ] && ZIP_FILES="$ZIP_FILES system"
-          [ -d "script" ] && ZIP_FILES="$ZIP_FILES script"
-          [ -d "common" ] && ZIP_FILES="$ZIP_FILES common"
+          echo "=== Zip file created successfully ==="
+          ls -la VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip
           
-          # Add changelog.md if it exists (prioritize local changelog over downloaded)
-          [ -f "changelog.md" ] && ZIP_FILES="$ZIP_FILES changelog.md"
-          
-          if [ -n "$ZIP_FILES" ]; then
-            zip -r "VTEC_Dynamic_${{ env.MODULE_VERSION_NUMBER }}.zip" $ZIP_FILES
-            echo "=== Zip file created successfully ==="
-            ls -la "VTEC_Dynamic_${{ env.MODULE_VERSION_NUMBER }}.zip"
-          else
-            echo "No files to zip! Please ensure your module structure is correct."
-            exit 1
-          fi
+          # Show contents of zip file
+          echo "=== Zip file contents ==="
+          unzip -l VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip
 
-      - name: Create update.json # สร้างไฟล์ update.json ใหม่
+      - name: Update update.json
         run: |
           cat << EOF > update.json
           {
             "version": "${{ env.MODULE_VERSION }}",
             "versionCode": "${{ env.MODULE_VERSION_CODE }}",
-            "zipUrl": "https://github.com/${{ github.repository }}/releases/download/${{ env.MODULE_VERSION }}/VTEC_Dynamic_${{ env.MODULE_VERSION_NUMBER }}.zip",
+            "zipUrl": "https://github.com/${{ github.repository }}/releases/download/${{ env.MODULE_VERSION }}/VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip",
             "changelog": "https://raw.githubusercontent.com/${{ github.repository }}/main/changelog.md"
           }
           EOF
@@ -243,54 +177,29 @@ jobs:
           echo "=== update.json created ==="
           cat update.json
 
-      - name: Commit updated files # Commit ไฟล์ที่ถูกแก้ไขกลับเข้าสู่ repository
+      - name: Commit updated files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Add files if they exist and are modified
-          git add update.json
-          [ -f "module.prop" ] && git add module.prop
+          # Add all files from release
+          git add .
           
           # Check if there are changes to commit
           if git diff --staged --quiet; then
-            echo "No changes detected to commit."
+            echo "No changes to commit"
           else
-            git commit -m "Update version to ${{ env.MODULE_VERSION }} [skip ci]"
+            git commit -m "Update repository with release files ${{ env.MODULE_VERSION }} [skip ci]"
             git push
-            echo "Committed and pushed changes to repository."
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Release # สร้าง GitHub Release ใหม่
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.MODULE_VERSION }}
-          name: Release ${{ env.MODULE_VERSION }}
-          body: |
-            # VTEC Dynamic Magisk Module - ${{ env.MODULE_VERSION }}
-
-            This is an automated release based on the latest version.
-            
-            **Version Information:**
-            - Version: ${{ env.MODULE_VERSION }}
-            - Version Code: ${{ env.MODULE_VERSION_CODE }}
-            
-            **Changes:**
-            Refer to [changelog.md](https://github.com/${{ github.repository }}/blob/main/changelog.md) for full changes.
-          files: |
-            VTEC_Dynamic_${{ env.MODULE_VERSION_NUMBER }}.zip
-            update.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Complete job # แสดงข้อความการทำงานเสร็จสิ้น
+      - name: Complete job
         run: |
-          echo "=== Build and Release completed successfully! ==="
-          echo "Previous release info processed"
-          echo "Created: VTEC_Dynamic_${{ env.MODULE_VERSION_NUMBER }}.zip"
-          echo "New Version: ${{ env.MODULE_VERSION }} (v4.7 format)"
-          echo "New Version Code: ${{ env.MODULE_VERSION_CODE }} (151 format)"
-          echo "Zip filename: VTEC_Dynamic_${{ env.MODULE_VERSION_NUMBER }}.zip (4.7 format)"
-          echo "GitHub Release created with tag ${{ env.MODULE_VERSION }}"
+          echo "=== Build completed successfully ==="
+          echo "Created: VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip"
+          echo "Version: ${{ env.MODULE_VERSION }}"
+          echo "Version Code: ${{ env.MODULE_VERSION_CODE }}"
+          echo "Source: ${{ env.HAS_RELEASE == 'true' && 'Latest Release' || 'Repository Files' }}"
+          ls -la VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip
