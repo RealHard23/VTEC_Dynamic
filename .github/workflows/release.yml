@@ -2,10 +2,10 @@ name: Update Module Info from GitHub Release
 
 on:
   release:
-    types: [published] # This workflow runs when a new release is published
+    types: [published]
 
 permissions:
-  contents: write # Required to commit files back to the repository
+  contents: write   # Needed to commit back to the repository
 
 jobs:
   update_info:
@@ -15,115 +15,67 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get Release Info
-        id: get_release # Assign an ID to this step to access its outputs
+      - name: Install jq
         run: |
-          # ติดตั้ง jq เพื่อช่วยในการ parse JSON
-          sudo apt-get update
+          sudo apt-get update -qq
           sudo apt-get install -y jq
 
-          RELEASE_TAG="${{ github.event.release.tag_name }}"
-          RELEASE_ZIP_URL=""
-          
-          # ค้นหาไฟล์ .zip ใน release assets
-          # UPDATED: ค้นหาชื่อไฟล์ที่มี "VTEC_Dynamic_"
-          for asset in $(echo "${{ github.event.release.assets | toJSON }}" | jq -r '.[].browser_download_url'); do
-            if [[ "$asset" == *"/VTEC_Dynamic_"*".zip" ]]; then # เปลี่ยนจาก VTEC_Unlimit_ เป็น VTEC_Dynamic_
-              RELEASE_ZIP_URL="$asset"
-              break
-            fi
-          done
+      - name: Collect release data
+        id: release
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          ZIP_URL="$(echo '${{ toJson(github.event.release.assets) }}' \
+                     | jq -r '.[] | select(.name | contains("VTEC_Dynamic_")) | .browser_download_url')"
 
-          if [ -z "$RELEASE_TAG" ]; then
-            echo "Error: Release tag not found!"
-            exit 1
-          fi
+          [[ -z "$TAG" ]]      && { echo "❌ No release tag found";      exit 1; }
+          [[ -z "$ZIP_URL" ]]  && { echo "❌ No VTEC_Dynamic_*.zip asset found"; exit 1; }
 
-          if [ -z "$RELEASE_ZIP_URL" ]; then
-            echo "Error: Magisk module .zip asset (containing 'VTEC_Dynamic_') not found in the release assets!" # ข้อความแจ้งเตือนเปลี่ยนตามชื่อไฟล์
-            exit 1
-          fi
+          VERSION="${TAG#v}"
+          VERSION_CODE="151"
 
-          # ดึงเวอร์ชันโมดูลจากชื่อ tag (เช่น v4.7 -> 4.7)
-          MODULE_VERSION=$(echo "$RELEASE_TAG" | sed 's/^v//I')
-
-          # UPDATED: กำหนด versionCode แบบตายตัวตามที่คุณต้องการ
-          MODULE_VERSION_CODE="151" # กำหนดเป็น 151
-
-          echo "Detected Module Version: $MODULE_VERSION"
-          echo "Detected Module Version Code: $MODULE_VERSION_CODE"
-          echo "Detected Zip URL: $RELEASE_ZIP_URL"
-
-          echo "MODULE_VERSION=$MODULE_VERSION" >> $GITHUB_ENV
-          echo "MODULE_VERSION_CODE=$MODULE_VERSION_CODE" >> $GITHUB_ENV
-          echo "MODULE_ZIP_URL=$RELEASE_ZIP_URL" >> $GITHUB_ENV
+          echo "VERSION=$VERSION"         >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "ZIP_URL=$ZIP_URL"         >> "$GITHUB_ENV"
 
       - name: Update module.prop
         run: |
-          echo "=== Updating module.prop ==="
-          # ตรวจสอบว่ามี module.prop อยู่หรือไม่ ก่อนที่จะ cp
-          if [ -f module.prop ]; then
-            cp module.prop module.prop.bak
-          else
-            echo "Warning: module.prop not found. Creating a new one."
-            touch module.prop
-          fi
-          
-          # อัปเดต version ใน module.prop
-          if grep -q "^version=" module.prop; then
-            sed -i "s|^version=.*|version=${{ env.MODULE_VERSION }}|" module.prop
-          else
-            echo "version=${{ env.MODULE_VERSION }}" >> module.prop
-          fi
-          
-          # อัปเดต versionCode ใน module.prop
-          if grep -q "^versionCode=" module.prop; then
-            sed -i "s|^versionCode=.*|versionCode=${{ env.MODULE_VERSION_CODE }}|" module.prop
-          else
-            echo "versionCode=${{ env.MODULE_VERSION_CODE }}" >> module.prop
-          fi
-          
-          echo "=== Updated module.prop ==="
-          cat module.prop
+          [[ -f module.prop ]] && cp module.prop module.prop.bak || touch module.prop
 
-      - name: Update update.json
+          sed -i '/^version=/d'       module.prop
+          sed -i '/^versionCode=/d'   module.prop
+          echo "version=${{ env.VERSION }}"       >> module.prop
+          echo "versionCode=${{ env.VERSION_CODE }}" >> module.prop
+
+      - name: Create / update update.json
         run: |
-          echo "=== Creating/Updating update.json ==="
-          cat << EOF > update.json
+          cat > update.json <<EOF
           {
-            "version": "${{ env.MODULE_VERSION }}",
-            "versionCode": "${{ env.MODULE_VERSION_CODE }}",
-            "zipUrl": "${{ env.MODULE_ZIP_URL }}",
+            "version": "${{ env.VERSION }}",
+            "versionCode": ${{ env.VERSION_CODE }},
+            "zipUrl": "${{ env.ZIP_URL }}",
             "changelog": "https://raw.githubusercontent.com/${{ github.repository }}/main/changelog.md"
           }
           EOF
-          
-          echo "=== update.json created ==="
-          cat update.json
 
-      - name: Commit updated files
+      - name: Commit & push changes
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           git add module.prop update.json
-          
-          # ตรวจสอบว่ามีการเปลี่ยนแปลงที่ต้อง commit หรือไม่
-          if git diff --staged --quiet; then
-            echo "No changes to commit for module.prop or update.json."
+          if git diff --cached --quiet; then
+            echo "ℹ️  Nothing to commit."
           else
-            git commit -m "✨ Sync: Update module.prop and update.json from Release ${{ env.MODULE_VERSION }} [skip ci]"
-            # แก้ไขตรงนี้: เพิ่ม --force-with-lease เพื่อแก้ไขปัญหา rejected push
-            git push --force-with-lease 
-            echo "Committed module.prop and update.json changes."
+            git commit -m "✨ Sync: update module info from release ${{ env.VERSION }} [skip ci]"
+            git push --force-with-lease
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # จำเป็นสำหรับการ push การเปลี่ยนแปลง
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Complete job
+      - name: Job summary
         run: |
-          echo "=== Update from Release completed successfully ==="
-          echo "Module Info Synced:"
-          echo "Version: ${{ env.MODULE_VERSION }}"
-          echo "Version Code: ${{ env.MODULE_VERSION_CODE }}"
-          echo "Zip URL: ${{ env.MODULE_ZIP_URL }}"
+          echo "✅ Module info synced:"
+          echo "   Version: ${{ env.VERSION }}"
+          echo "   VersionCode: ${{ env.VERSION_CODE }}"
+          echo "   Zip URL: ${{ env.ZIP_URL }}"
+
