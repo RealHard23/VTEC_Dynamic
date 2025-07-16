@@ -1,81 +1,241 @@
-name: Update Module Info from GitHub Release
+name: Build & Release Magisk Module
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main
+  workflow_dispatch: # อนุญาตให้รัน workflow ด้วยตัวเอง
 
 permissions:
-  contents: write   # Needed to commit back to the repository
+  contents: write # ต้องการสิทธิ์ในการเขียนไฟล์ใน repository
 
 jobs:
-  update_info:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-latest # รันบนระบบปฏิบัติการ Ubuntu ล่าสุด
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository # ดึงโค้ดจาก repository
         uses: actions/checkout@v4
 
-      - name: Install jq
+      - name: Setup Node.js (for jq if not available) # เตรียม Node.js เพื่อใช้ jq หากจำเป็น
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # ใช้ Node.js v20 หรือเวอร์ชันที่คุณต้องการ
+          cache: 'npm' # เปิดใช้งาน cache สำหรับ npm
+
+      - name: Install jq (if not pre-installed) # ติดตั้ง jq สำหรับประมวลผล JSON
+        run: sudo apt-get install -y jq
+
+      - name: Set version info (from hardcode or adjust later) # กำหนดข้อมูลเวอร์ชันเริ่มต้น
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y jq
-
-      - name: Collect release data
-        id: release
-        run: |
-          TAG="${{ github.event.release.tag_name }}"
-          ZIP_URL="$(echo '${{ toJson(github.event.release.assets) }}' \
-                     | jq -r '.[] | select(.name | contains("VTEC_Dynamic_")) | .browser_download_url')"
-
-          [[ -z "$TAG" ]]      && { echo "❌ No release tag found";      exit 1; }
-          [[ -z "$ZIP_URL" ]]  && { echo "❌ No VTEC_Dynamic_*.zip asset found"; exit 1; }
-
-          VERSION="${TAG#v}"
+          # ตรงนี้เป็นค่าเริ่มต้น หากคุณต้องการให้ดึงจากไฟล์ release.json หรือ module.prop ที่ดาวน์โหลดมา
+          # คุณสามารถปรับแต่งในขั้นตอนถัดไปได้
+          VERSION="v4.7"
           VERSION_CODE="151"
+          echo "MODULE_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "MODULE_VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
-          echo "VERSION=$VERSION"         >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
-          echo "ZIP_URL=$ZIP_URL"         >> "$GITHUB_ENV"
-
-      - name: Update module.prop
+      ---
+      - name: Download Latest Release Assets (Optional) # ขั้นตอนนี้จะพยายามดึงไฟล์จาก Release ล่าสุด
+        id: get_release_assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # ใช้ GITHUB_TOKEN ในการเรียก API
         run: |
-          [[ -f module.prop ]] && cp module.prop module.prop.bak || touch module.prop
+          echo "Attempting to fetch latest release information..."
+          # ดึงข้อมูล Release ล่าสุด
+          RELEASE_INFO=$(curl -s -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+          
+          # ตรวจสอบว่ามี release หรือไม่
+          if [ "$(echo "$RELEASE_INFO" | jq -r '.message')" == "Not Found" ]; then
+            echo "No releases found. Skipping download of existing release assets."
+            exit 0 # ออกจากขั้นตอนนี้โดยไม่มีข้อผิดพลาด
+          fi
 
-          sed -i '/^version=/d'       module.prop
-          sed -i '/^versionCode=/d'   module.prop
-          echo "version=${{ env.VERSION }}"       >> module.prop
-          echo "versionCode=${{ env.VERSION_CODE }}" >> module.prop
+          echo "Latest release found. Parsing assets..."
+          
+          # ดึง URL ของไฟล์ที่คุณต้องการจาก assets (ตัวอย่าง: update.json และ changelog.md)
+          UPDATE_JSON_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name == "update.json") | .browser_download_url')
+          CHANGELOG_URL=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name == "changelog.md") | .browser_download_url')
 
-      - name: Create / update update.json
+          # ดาวน์โหลดไฟล์ update.json (ถ้ามี)
+          if [ -n "$UPDATE_JSON_URL" ]; then
+            echo "Downloading update.json from latest release..."
+            curl -L -o downloaded_update.json "$UPDATE_JSON_URL"
+            echo "downloaded_update.json content:"
+            cat downloaded_update.json
+            
+            # ถ้าต้องการใช้เวอร์ชันจาก update.json ที่ดาวน์โหลดมา
+            # NEW_VERSION=$(jq -r '.version' downloaded_update.json)
+            # NEW_VERSION_CODE=$(jq -r '.versionCode' downloaded_update.json)
+            # echo "MODULE_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+            # echo "MODULE_VERSION_CODE=$NEW_VERSION_CODE" >> $GITHUB_ENV
+            # echo "Updated env vars from downloaded update.json: Version=$NEW_VERSION, Code=$NEW_VERSION_CODE"
+          else
+            echo "update.json not found in latest release assets."
+          fi
+
+          # ดาวน์โหลดไฟล์ changelog.md (ถ้ามี)
+          if [ -n "$CHANGELOG_URL" ]; then
+            echo "Downloading changelog.md from latest release..."
+            curl -L -o downloaded_changelog.md "$CHANGELOG_URL"
+            echo "downloaded_changelog.md content:"
+            cat downloaded_changelog.md
+          else
+            echo "changelog.md not found in latest release assets."
+          fi
+      ---
+
+      - name: Check and list files # ตรวจสอบโครงสร้างไฟล์
         run: |
-          cat > update.json <<EOF
+          echo "=== Repository structure ==="
+          ls -la
+          echo "=== Checking module.prop ==="
+          if [ -f "module.prop" ]; then
+            echo "module.prop exists"
+            cat module.prop
+          else
+            echo "module.prop not found! This module might not be valid without it."
+            exit 1 # ถ้าไม่มี module.prop ถือว่าผิดพลาด
+          fi
+
+      - name: Update module.prop version # อัปเดตเวอร์ชันใน module.prop
+        run: |
+          # Backup original module.prop
+          cp module.prop module.prop.bak
+          
+          # Update version in module.prop - handle different formats
+          if grep -q "^version=" module.prop; then
+            sed -i 's/^version=.*/version=${{ env.MODULE_VERSION }}/' module.prop
+          else
+            echo "version=${{ env.MODULE_VERSION }}" >> module.prop
+          fi
+          
+          if grep -q "^versionCode=" module.prop; then
+            sed -i 's/^versionCode=.*/versionCode=${{ env.MODULE_VERSION_CODE }}/' module.prop
+          else
+            echo "versionCode=${{ env.MODULE_VERSION_CODE }}" >> module.prop
+          fi
+          
+          echo "=== Updated module.prop ==="
+          cat module.prop
+
+      - name: Set executable permissions # กำหนดสิทธิ์ในการเรียกใช้งานไฟล์สคริปต์
+        run: |
+          # Set permissions only if files exist
+          [ -f "install.sh" ] && chmod +x install.sh || echo "install.sh not found"
+          [ -f "uninstall.sh" ] && chmod +x uninstall.sh || echo "uninstall.sh not found"
+          
+          # Set permissions for META-INF
+          if [ -d "META-INF" ]; then
+            find META-INF -type f -name "update-binary" -exec chmod +x {} \;
+            find META-INF -type f -name "*.sh" -exec chmod +x {} \;
+          fi
+          
+          # Set permissions for script directory
+          if [ -d "script" ]; then
+            find script -type f -name "*.sh" -exec chmod +x {} \;
+          fi
+          
+          # Set permissions for common directory
+          if [ -d "common" ]; then
+            find common -type f -name "*.sh" -exec chmod +x {} \;
+          fi
+          
+          # Set permissions for system directory (usually 644 for files, 755 for directories)
+          if [ -d "system" ]; then
+            find system -type f -exec chmod 644 {} \;
+            find system -type d -exec chmod 755 {} \;
+          fi
+
+      - name: Create Magisk module zip # สร้างไฟล์ Magisk module zip
+        run: |
+          echo "=== Creating zip file ==="
+          
+          # Create zip with only existing files
+          ZIP_FILES=""
+          
+          [ -f "module.prop" ] && ZIP_FILES="$ZIP_FILES module.prop"
+          [ -f "install.sh" ] && ZIP_FILES="$ZIP_FILES install.sh"
+          [ -f "uninstall.sh" ] && ZIP_FILES="$ZIP_FILES uninstall.sh"
+          [ -d "META-INF" ] && ZIP_FILES="$ZIP_FILES META-INF"
+          [ -d "system" ] && ZIP_FILES="$ZIP_FILES system"
+          [ -d "script" ] && ZIP_FILES="$ZIP_FILES script"
+          [ -d "common" ] && ZIP_FILES="$ZIP_FILES common"
+          
+          # Add changelog.md if it exists (prioritize local changelog.md over downloaded one)
+          [ -f "changelog.md" ] && ZIP_FILES="$ZIP_FILES changelog.md"
+          
+          if [ -n "$ZIP_FILES" ]; then
+            zip -r "VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip" $ZIP_FILES
+            echo "=== Zip file created successfully ==="
+            ls -la "VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip"
+          else
+            echo "No files to zip! Please ensure your module structure is correct."
+            exit 1
+          fi
+
+      - name: Update update.json # สร้างหรืออัปเดตไฟล์ update.json
+        run: |
+          # โค้ดนี้จะสร้าง update.json ใหม่ทุกครั้งตามข้อมูลการ build ปัจจุบัน
+          # หากคุณต้องการดึงข้อมูลจาก downloaded_update.json แล้วแก้ไขบางส่วน
+          # คุณจะต้องเพิ่ม logic ในการอ่านและแก้ไขไฟล์ downloaded_update.json
+          
+          cat << EOF > update.json
           {
-            "version": "${{ env.VERSION }}",
-            "versionCode": ${{ env.VERSION_CODE }},
-            "zipUrl": "${{ env.ZIP_URL }}",
+            "version": "${{ env.MODULE_VERSION }}",
+            "versionCode": "${{ env.MODULE_VERSION_CODE }}",
+            "zipUrl": "https://github.com/${{ github.repository }}/releases/download/${{ env.MODULE_VERSION }}/VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip",
             "changelog": "https://raw.githubusercontent.com/${{ github.repository }}/main/changelog.md"
           }
           EOF
+          
+          echo "=== update.json created ==="
+          cat update.json
 
-      - name: Commit & push changes
+      - name: Commit updated files # Commit ไฟล์ที่ถูกแก้ไขกลับเข้าสู่ repository
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add module.prop update.json
-          if git diff --cached --quiet; then
-            echo "ℹ️  Nothing to commit."
+          
+          # Add files if they exist and are modified
+          git add update.json
+          [ -f "module.prop" ] && git add module.prop
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes detected to commit."
           else
-            git commit -m "✨ Sync: update module info from release ${{ env.VERSION }} [skip ci]"
-            git push --force-with-lease
+            git commit -m "Update version to ${{ env.MODULE_VERSION }} [skip ci]"
+            git push
+            echo "Committed and pushed changes to repository."
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # ใช้ GITHUB_TOKEN ในการ push
 
-      - name: Job summary
+      - name: Create Release # สร้าง GitHub Release (รวมไฟล์ zip และ update.json)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.MODULE_VERSION }} # ใช้เวอร์ชันเป็น tag
+          name: Release ${{ env.MODULE_VERSION }} # ชื่อ Release
+          body: |
+            # VTEC Dynamic Magisk Module - ${{ env.MODULE_VERSION }}
+
+            This is an automated release.
+            
+            **Changes:**
+            Refer to [changelog.md](https://github.com/${{ github.repository }}/blob/main/changelog.md) for full changes.
+          files: |
+            VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip
+            update.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # ใช้ GITHUB_TOKEN ในการสร้าง Release
+
+      - name: Complete job # แสดงข้อความการทำงานเสร็จสิ้น
         run: |
-          echo "✅ Module info synced:"
-          echo "   Version: ${{ env.VERSION }}"
-          echo "   VersionCode: ${{ env.VERSION_CODE }}"
-          echo "   Zip URL: ${{ env.ZIP_URL }}"
-
+          echo "=== Build and Release completed successfully! ==="
+          echo "Created: VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip"
+          echo "Version: ${{ env.MODULE_VERSION }}"
+          echo "Version Code: ${{ env.MODULE_VERSION_CODE }}"
+          echo "GitHub Release created with tag ${{ env.MODULE_VERSION }}"
