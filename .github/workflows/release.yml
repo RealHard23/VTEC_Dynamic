@@ -17,14 +17,22 @@ jobs:
       - name: Checkout repository # ดึงโค้ดจาก repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js (for jq if not available) # เตรียม Node.js เพื่อใช้ jq หากจำเป็น
+      - name: Setup Node.js (for jq if not available) # เตรียม Node.js เพื่อใช้ jq หากจำเป็น (jq มักจะมีอยู่แล้ว)
         uses: actions/setup-node@v4
         with:
           node-version: '20' # ใช้ Node.js v20 หรือเวอร์ชันที่คุณต้องการ
           cache: 'npm' # เปิดใช้งาน cache สำหรับ npm
 
       - name: Install jq (if not pre-installed) # ติดตั้ง jq สำหรับประมวลผล JSON
-        run: sudo apt-get install -y jq
+        run: |
+          if ! command -v jq &> /dev/null
+          then
+              echo "jq not found, installing..."
+              sudo apt-get update
+              sudo apt-get install -y jq
+          else
+              echo "jq is already installed."
+          fi
 
       - name: Set version info (from hardcode or adjust later) # กำหนดข้อมูลเวอร์ชันเริ่มต้น
         run: |
@@ -35,7 +43,6 @@ jobs:
           echo "MODULE_VERSION=$VERSION" >> $GITHUB_ENV
           echo "MODULE_VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
-      ---
       - name: Download Latest Release Assets (Optional) # ขั้นตอนนี้จะพยายามดึงไฟล์จาก Release ล่าสุด
         id: get_release_assets
         env:
@@ -48,7 +55,8 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/releases/latest")
           
           # ตรวจสอบว่ามี release หรือไม่
-          if [ "$(echo "$RELEASE_INFO" | jq -r '.message')" == "Not Found" ]; then
+          # เช็คว่าข้อความตอบกลับเป็น "Not Found" หรือไม่
+          if echo "$RELEASE_INFO" | grep -q '"message": "Not Found"'; then
             echo "No releases found. Skipping download of existing release assets."
             exit 0 # ออกจากขั้นตอนนี้โดยไม่มีข้อผิดพลาด
           fi
@@ -67,6 +75,7 @@ jobs:
             cat downloaded_update.json
             
             # ถ้าต้องการใช้เวอร์ชันจาก update.json ที่ดาวน์โหลดมา
+            # คุณสามารถ uncomment บรรทัดด้านล่างนี้ได้
             # NEW_VERSION=$(jq -r '.version' downloaded_update.json)
             # NEW_VERSION_CODE=$(jq -r '.versionCode' downloaded_update.json)
             # echo "MODULE_VERSION=$NEW_VERSION" >> $GITHUB_ENV
@@ -85,7 +94,6 @@ jobs:
           else
             echo "changelog.md not found in latest release assets."
           fi
-      ---
 
       - name: Check and list files # ตรวจสอบโครงสร้างไฟล์
         run: |
@@ -239,3 +247,4 @@ jobs:
           echo "Version: ${{ env.MODULE_VERSION }}"
           echo "Version Code: ${{ env.MODULE_VERSION_CODE }}"
           echo "GitHub Release created with tag ${{ env.MODULE_VERSION }}"
+
