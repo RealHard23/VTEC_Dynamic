@@ -18,13 +18,17 @@ jobs:
       - name: Get Release Info
         id: get_release # Assign an ID to this step to access its outputs
         run: |
+          # ติดตั้ง jq เพื่อช่วยในการ parse JSON
+          sudo apt-get update
+          sudo apt-get install -y jq
+
           RELEASE_TAG="${{ github.event.release.tag_name }}"
           RELEASE_ZIP_URL=""
           
-          # Find the .zip asset in the release assets
-          # UPDATED: Looking for "VTEC_Dynamic_" in the zip name
+          # ค้นหาไฟล์ .zip ใน release assets
+          # UPDATED: ค้นหาชื่อไฟล์ที่มี "VTEC_Dynamic_"
           for asset in $(echo "${{ github.event.release.assets | toJSON }}" | jq -r '.[].browser_download_url'); do
-            if [[ "$asset" == *"/VTEC_Dynamic_"*".zip" ]]; then # Changed from VTEC_Unlimit_
+            if [[ "$asset" == *"/VTEC_Dynamic_"*".zip" ]]; then # เปลี่ยนจาก VTEC_Unlimit_ เป็น VTEC_Dynamic_
               RELEASE_ZIP_URL="$asset"
               break
             fi
@@ -36,16 +40,15 @@ jobs:
           fi
 
           if [ -z "$RELEASE_ZIP_URL" ]; then
-            echo "Error: Magisk module .zip asset (containing 'VTEC_Dynamic_') not found in the release assets!" # Changed message
+            echo "Error: Magisk module .zip asset (containing 'VTEC_Dynamic_') not found in the release assets!" # ข้อความแจ้งเตือนเปลี่ยนตามชื่อไฟล์
             exit 1
           fi
 
-          # Extract module version from the tag name (e.g., v4.7 -> 4.7)
+          # ดึงเวอร์ชันโมดูลจากชื่อ tag (เช่น v4.7 -> 4.7)
           MODULE_VERSION=$(echo "$RELEASE_TAG" | sed 's/^v//I')
 
-          # UPDATED: Hardcode versionCode for simplicity as per your request
-          # If you want it to be dynamic, you'll need a different extraction method
-          MODULE_VERSION_CODE="151" # Set to your desired versionCode
+          # UPDATED: กำหนด versionCode แบบตายตัวตามที่คุณต้องการ
+          MODULE_VERSION_CODE="151" # กำหนดเป็น 151
 
           echo "Detected Module Version: $MODULE_VERSION"
           echo "Detected Module Version Code: $MODULE_VERSION_CODE"
@@ -58,14 +61,22 @@ jobs:
       - name: Update module.prop
         run: |
           echo "=== Updating module.prop ==="
-          cp module.prop module.prop.bak
+          # ตรวจสอบว่ามี module.prop อยู่หรือไม่ ก่อนที่จะ cp
+          if [ -f module.prop ]; then
+            cp module.prop module.prop.bak
+          else
+            echo "Warning: module.prop not found. Creating a new one."
+            touch module.prop
+          fi
           
+          # อัปเดต version ใน module.prop
           if grep -q "^version=" module.prop; then
             sed -i "s|^version=.*|version=${{ env.MODULE_VERSION }}|" module.prop
           else
             echo "version=${{ env.MODULE_VERSION }}" >> module.prop
           fi
           
+          # อัปเดต versionCode ใน module.prop
           if grep -q "^versionCode=" module.prop; then
             sed -i "s|^versionCode=.*|versionCode=${{ env.MODULE_VERSION_CODE }}|" module.prop
           else
@@ -97,15 +108,17 @@ jobs:
           
           git add module.prop update.json
           
+          # ตรวจสอบว่ามีการเปลี่ยนแปลงที่ต้อง commit หรือไม่
           if git diff --staged --quiet; then
             echo "No changes to commit for module.prop or update.json."
           else
             git commit -m "✨ Sync: Update module.prop and update.json from Release ${{ env.MODULE_VERSION }} [skip ci]"
-            git push
+            # แก้ไขตรงนี้: เพิ่ม --force-with-lease เพื่อแก้ไขปัญหา rejected push
+            git push --force-with-lease 
             echo "Committed module.prop and update.json changes."
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # จำเป็นสำหรับการ push การเปลี่ยนแปลง
 
       - name: Complete job
         run: |
