@@ -57,6 +57,7 @@ if [ -e /sys/class/thermal/thermal_message/sconfig ]; then
 su -c settings put global touch_response_time 0
 su -c cmd power set-fixed-performance-mode-enabled true
 su -c cmd thermalservice override-status 0
+su -c settings put secure fps_divisor 0
 su -c settings put system speed_mode 1
 su -c settings put secure speed_mode_enable 1
 su -c settings put system thermal_limit_refresh_rate 0
@@ -88,12 +89,19 @@ echo 4 > /proc/sys/kernel/sched_pelt_multiplier
 echo "0" > /sys/devices/system/cpu/cpu*/cpufreq/*/down_rate_limit_us
 echo "0" > /sys/devices/system/cpu/cpu*/cpufreq/*/up_rate_limit_us
 
-# เพิ่ม GPU Priority และลด Latency
-echo "3" > /proc/sys/kernel/sched_child_runs_first
-echo "200" > /proc/sys/vm/swappiness
+# เปิดการเร่งแสดงผล UI
+setprop persist.sys.ui.render_mode fast
+setprop persist.sys.ui.thread_priority max
+# บังคับให้แคชระบบใหม่ทั้งหมด
+setprop persist.sys.force_high_performance 1
+# เปิดใช้งานการแจ้งเตือนแบบ aggressive
+setprop persist.sys.notification_response fast
+# ลด latency แจ้งเตือนแบบ aggressive
+setprop persist.sys.notification_boost true
+# เปิด GPU Boost (อาจต้องรองรับจาก Kernel)
+setprop persist.sys.gpu.boost 1
 
-# Increase RenderThread Priority
-#renice -n -5 -p $(pidof RenderThread) 2>/dev/null
+# echo "200" > /proc/sys/vm/swappiness
 
 # Script
 nohup sh $MODDIR/script/shellscript > /dev/null &

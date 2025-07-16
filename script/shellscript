@@ -17,3 +17,4 @@ temperature="150000"
         echo "$temperature" > "$zone/trip_point_0_temp"
     fi
 done
+

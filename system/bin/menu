@@ -26,7 +26,7 @@ su -c opengl
 echo OPENGL
 ;;
 5)
-su -c skaigl
+su -c skiagl
 echo SKIAGL
 ;;
 6)

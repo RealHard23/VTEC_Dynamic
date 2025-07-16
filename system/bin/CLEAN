@@ -7,7 +7,6 @@ echo "Clearing cache, please wait ..."
 sync
 echo -n "."
 sleep 1
-echo "3" > /proc/sys/vm/drop_caches
 am kill-all
 echo ""
 echo -n "Stopping background services, please wait ... "
@@ -27,6 +26,7 @@ echo ""
 ram=$(awk '/MemAvailable/{print $2/1024;exit}' /proc/meminfo)
 echo "* Your cache has been cleared. Free Memory After Boosting: $ram MB"
 echo ""
+su sync && echo 3 > /proc/sys/vm/drop_caches
 echo ""
 echo "Done"
 echo ""
