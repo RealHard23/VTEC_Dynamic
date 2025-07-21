@@ -136,33 +136,6 @@ jobs:
             find system -type f -exec chmod 644 {} \;
           fi
 
-      - name: Create Magisk module zip
-        run: |
-          echo "=== Creating zip file ==="
-          
-          # Create zip with all repository files except .git and workflow files
-          zip -r "VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip" . \
-            -x ".git/*" \
-            -x ".github/*" \
-            -x "*.bak" \
-            -x "*.md" \
-            -x "*.txt" \
-            -x "*.log" \
-            -x ".gitignore" \
-            -x "README*" \
-            -x "readme*" \
-            -x "LICENSE*" \
-            -x "license*" \
-            -x "*.zip" \
-            -x "release.zip"
-          
-          echo "=== Zip file created successfully ==="
-          ls -la VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip
-          
-          # Show contents of zip file
-          echo "=== Zip file contents ==="
-          unzip -l VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip
-
       - name: Update update.json
         run: |
           cat << EOF > update.json
@@ -198,8 +171,6 @@ jobs:
       - name: Complete job
         run: |
           echo "=== Build completed successfully ==="
-          echo "Created: VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip"
           echo "Version: ${{ env.MODULE_VERSION }}"
           echo "Version Code: ${{ env.MODULE_VERSION_CODE }}"
           echo "Source: ${{ env.HAS_RELEASE == 'true' && 'Latest Release' || 'Repository Files' }}"
-          ls -la VTEC_Dynamic_${{ env.MODULE_VERSION }}.zip
