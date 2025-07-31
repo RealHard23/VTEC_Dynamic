@@ -108,12 +108,6 @@ echo 0 > /sys/class/power_supply/battery/system_temp_level 2>/dev/null
 echo 0 > /sys/class/power_supply/battery/input_suspend 2>/dev/null
 echo 0 > /sys/class/qcom-bcl*/mode 2>/dev/null
 
-# ปิด dynamic stune / schedutil input-boost -------
-echo 0 > /sys/module/cpu_input_boost/parameters/enabled 2>/dev/null
-echo 0 > /sys/module/dsboost/parameters/enabled 2>/dev/null
-echo 0 > /sys/module/dsboost/parameters/input_boost_ms 2>/dev/null
-echo 0 > /sys/module/cpu_boost/parameters/input_boost_ms 2>/dev/null
-
 # Script
 nohup sh $MODDIR/script/shellscript > /dev/null &
 
