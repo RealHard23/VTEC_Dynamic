@@ -1,7 +1,7 @@
 id=Tweaks_Snapdragon
 name=VTEC_Dynamic
-version=v4.8.1
-versionCode=153
+version=v4.9
+versionCode=154
 author=REALHARD
 description=🥳 Improve overall performance. Using dynamic thermal profiles.
 updateJson=https://raw.githubusercontent.com/RealHard23/VTEC_Dynamic/main/update.json
